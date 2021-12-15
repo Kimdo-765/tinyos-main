@@ -17,9 +17,9 @@ implementation {
   DummyTaskP.Timer4 -> Timer4;
   DummyTaskP.Leds -> LedsC;
   DummyTaskP.Random -> RandomC;
-  DummyTaskP.toggle0 -> TinySchedulerC.TaskBasic[unique("TinySchedulerC.TaskBasic")];
-  DummyTaskP.toggle1 -> TinySchedulerC.TaskBasic[unique("TinySchedulerC.TaskBasic")];
-  DummyTaskP.toggle2 -> TinySchedulerC.TaskBasic[unique("TinySchedulerC.TaskBasic")];
-  DummyTaskP.toggle3 -> TinySchedulerC.TaskBasic[unique("TinySchedulerC.TaskBasic")];
-  DummyTaskP.toggle4 -> TinySchedulerC.TaskBasic[unique("TinySchedulerC.TaskBasic")];
+  DummyTaskP.toggle0 -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  DummyTaskP.toggle1 -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  DummyTaskP.toggle2 -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  DummyTaskP.toggle3 -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  DummyTaskP.toggle4 -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
 } 

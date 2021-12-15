@@ -58,12 +58,12 @@ implementation
     NO_TASK = 255,
   };
 
-  uint16_t pop_count;
   uint8_t m_head;
   uint8_t m_tail;
   uint8_t m_next[NUM_TASKS];
 
   uint8_t m_p_head;
+  uint16_t pop_count;
   uint8_t m_p_next[NUM_TASKS_P];
   uint8_t m_p_prio[NUM_TASKS_P];
 
@@ -73,7 +73,7 @@ implementation
   bool sim_scheduler_event_pending = FALSE;
   sim_event_t sim_scheduler_event;
 
-  int sim_config_task_latency() {return 200;}
+  int sim_config_task_latency() {return 100;}
   
 
   /* Only enqueue the event for execution if it is
@@ -135,9 +135,7 @@ implementation
 	      m_tail = NO_TASK;
       }
       m_next[id] = NO_TASK;
-      dbg("BasicPop", "Pop [%hhu]\n",id);
-      pop_count++;
-      dbg("PopCount", "Pop %d\n",pop_count);
+      dbg("BasicPop", "Pop %hhu\n",id);
       return id;
     }
     else
@@ -155,6 +153,8 @@ implementation
       dbg("PrioPop", "Pop [%hhu,%hhu]\n",id,m_p_prio[id]);
       m_p_next[id] = NO_TASK;
       m_p_prio[id] = NO_TASK;
+      pop_count++;
+      dbg("PopCount", "Pop %d\n",pop_count);
       return id;
     }
     else
@@ -188,7 +188,7 @@ implementation
 	      m_next[m_tail] = id;
 	      m_tail = id;
       }
-      dbg("BasicPush", "Push [%hhu]\n",id);
+      dbg("BasicPush", "Push %hhu\n",id);
       return TRUE;
     }
     else
@@ -242,12 +242,12 @@ implementation
     atomic
     {
       memset( m_next, NO_TASK, sizeof(m_next) );
-      pop_count = 0;
       m_head = NO_TASK;
       m_tail = NO_TASK;
 
       memset( (void *)m_p_next, NO_TASK, sizeof(m_p_next) );
       memset( (void *)m_p_prio, NO_TASK, sizeof(m_p_prio) );
+      pop_count = 0;
       m_p_head = NO_TASK;
 
       sim_scheduler_event_pending = FALSE;
@@ -297,7 +297,7 @@ implementation
       sim_scheduler_submit_event();
     }
     else {
-      dbg("DeadLine", "Posting Basic task %hhu, but already posted.\n", id);
+      dbg("Scheduler", "Posting Basic task %hhu, but already posted.\n", id);
     }
     return result;
   }

@@ -70,6 +70,10 @@ implementation {
   App.Leds -> LedsC;
   App.MilliTimer -> TimerMilliC;
   App.Packet -> AMSenderC;
+  App.WRAPstart -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  App.WRAPMilliTimerstartPeriodic -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  App.WRAPPacketgetPayload -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
+  App.WRAPAMSendsend -> TinySchedulerC.TaskPriority[unique("TinySchedulerC.TaskPriority")];
 }
 
 

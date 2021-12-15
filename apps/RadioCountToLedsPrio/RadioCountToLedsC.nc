@@ -64,6 +64,9 @@ module RadioCountToLedsC @safe() {
     interface SplitControl as AMControl;
     interface Packet;
     interface TaskPriority as WRAPstart;
+    interface TaskPriority as WRAPMilliTimerstartPeriodic;
+    interface TaskPriority as WRAPPacketgetPayload;
+    interface TaskPriority as WRAPAMSendsend;
   }
 }
 implementation {
@@ -84,13 +87,13 @@ implementation {
     call MilliTimer.startPeriodic(250);
   }
 
-  event void WRAPPacketgetPayload.runTask()
+  event radio_count_msg_t* WRAPPacketgetPayload.runTask()
   {
     radio_count_msg_t* rcm = (radio_count_msg_t*)call Packet.getPayload(&packet, sizeof(radio_count_msg_t));
     return rcm;
   }
 
-  event void WRAPAMSendsend.runTask()
+  event bool WRAPAMSendsend.runTask()
   {
     bool r = call AMSend.send(AM_BROADCAST_ADDR, &packet, sizeof(radio_count_msg_t);
     return r;

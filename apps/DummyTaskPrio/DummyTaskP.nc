@@ -10,11 +10,11 @@ module DummyTaskP
   uses interface Leds;
   uses interface Boot;
   uses interface Random;
-  uses interface TaskBasic as toggle0;
-  uses interface TaskBasic as toggle1;
-  uses interface TaskBasic as toggle2;
-  uses interface TaskBasic as toggle3;
-  uses interface TaskBasic as toggle4;
+  uses interface TaskPriority as toggle0;
+  uses interface TaskPriority as toggle1;
+  uses interface TaskPriority as toggle2;
+  uses interface TaskPriority as toggle3;
+  uses interface TaskPriority as toggle4;
 }
 implementation
 {
@@ -50,32 +50,33 @@ implementation
     call Timer1.startPeriodic( 200 );
     call Timer2.startPeriodic( 300 );
     call Timer3.startPeriodic( 500 );
-    call Timer4.startPeriodic( 1000 );
+    call Timer4.startPeriodic( 1000 ); //random priority task
   }
 
   event void Timer0.fired()
   {
-    call toggle0.postTask();
+    call toggle0.postTask(0);
   }
 
   event void Timer1.fired()
   {
-    call toggle1.postTask();
+    call toggle1.postTask(1);
   }
 
   event void Timer2.fired()
   {
-    call toggle2.postTask();
+    call toggle2.postTask(2);
   }
 
   event void Timer3.fired()
   {
-    call toggle3.postTask();
+    call toggle3.postTask(3);
   }
 
   event void Timer4.fired()
   {
-    call toggle4.postTask();
+    uint16_t i = call Random.rand16();
+    call toggle4.postTask(i%5);
   }
 
 }

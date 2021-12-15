@@ -58,14 +58,14 @@ implementation
     NO_TASK = 255,
   };
 
-  uint16_t pop_count;
   uint8_t m_head;
   uint8_t m_tail;
   uint8_t m_next[NUM_TASKS];
 
   uint8_t m_p_head;
-  uint8_t m_p_next[NUM_TASKS_P];
-  uint8_t m_p_prio[NUM_TASKS_P];
+  uint8_t m_p_tail;
+  uint8_t m_p_next[NUM_TASKS];
+  uint8_t m_p_prio[NUM_TASKS];
 
   /* This simulation state is kept on a per-node basis.
      Better to take advantage of nesC's automatic state replication
@@ -73,7 +73,7 @@ implementation
   bool sim_scheduler_event_pending = FALSE;
   sim_event_t sim_scheduler_event;
 
-  int sim_config_task_latency() {return 200;}
+  int sim_config_task_latency() {return 100;}
   
 
   /* Only enqueue the event for execution if it is
@@ -132,12 +132,9 @@ implementation
       m_head = m_next[m_head];
       if( m_head == NO_TASK )
       {
-	      m_tail = NO_TASK;
+	m_tail = NO_TASK;
       }
       m_next[id] = NO_TASK;
-      dbg("BasicPop", "Pop [%hhu]\n",id);
-      pop_count++;
-      dbg("PopCount", "Pop %d\n",pop_count);
       return id;
     }
     else
@@ -152,7 +149,10 @@ implementation
     {
       uint8_t id = m_p_head;
       m_p_head = m_p_next[m_p_head];
-      dbg("PrioPop", "Pop [%hhu,%hhu]\n",id,m_p_prio[id]);
+      if( m_p_head == NO_TASK )
+      {
+        m_p_tail = NO_TASK;
+      }
       m_p_next[id] = NO_TASK;
       m_p_prio[id] = NO_TASK;
       return id;
@@ -171,7 +171,7 @@ implementation
 
   bool isPWaiting( uint8_t id )
   {
-    return (m_p_next[id] != NO_TASK);
+    return (m_p_next[id] != NO_TASK) || (m_p_tail == id);
   }
 
   bool pushTask( uint8_t id )
@@ -180,20 +180,18 @@ implementation
     {
       if( m_head == NO_TASK )
       {
-	      m_head = id;
-	      m_tail = id;
+	m_head = id;
+	m_tail = id;
       }
       else
       {
-	      m_next[m_tail] = id;
-	      m_tail = id;
+	m_next[m_tail] = id;
+	m_tail = id;
       }
-      dbg("BasicPush", "Push [%hhu]\n",id);
       return TRUE;
     }
     else
     {
-      dbg("BasicPush", "Waiting...\n");
       return FALSE;
     }
   }
@@ -205,33 +203,24 @@ implementation
       if( m_p_head == NO_TASK )
       {
 	      m_p_head = id;
-        m_p_next[m_p_head] = NO_TASK;
-        m_p_prio[m_p_head] = prio;
-        dbg("PrioPush", "No Queue, Push at head : [%hhu,%hhu]\n",id,m_p_prio[m_p_head]);
+      	m_p_tail = id;
+        m_p_prio[id] = prio;
       }
       else
       {
         uint8_t q = m_p_head;
-        if(m_p_prio[m_p_head] >= prio){
-          m_p_next[id] = m_p_head;
-          m_p_prio[id] = prio;
-          m_p_head = id;
-          dbg("PrioPush", "Push at head : [%hhu,%hhu]\n",id,m_p_prio[id]);
-          return TRUE;
-        }
-
         while(m_p_next[q] != NO_TASK && m_p_prio[m_p_next[q]] <= prio)
           q = m_p_next[q];
-        m_p_prio[id] = prio;
+        if(q == m_tail)
+          m_tail = id;
         m_p_next[id] = m_p_next[q];
         m_p_next[q] = id;
-        dbg("PrioPush", "Push  behind [%hhu,%hhu], Task : [%hhu,%hhu]\n",q,m_p_prio[q],id,m_p_prio[id]);
+        dbg("Priority", "Push behind head\n");
       }
       return TRUE;
     }
     else
     {
-      dbg("PrioPush", "Waiting... [%hhu]\n",id);
       return FALSE;
     }
   }
@@ -242,13 +231,13 @@ implementation
     atomic
     {
       memset( m_next, NO_TASK, sizeof(m_next) );
-      pop_count = 0;
       m_head = NO_TASK;
       m_tail = NO_TASK;
 
       memset( (void *)m_p_next, NO_TASK, sizeof(m_p_next) );
       memset( (void *)m_p_prio, NO_TASK, sizeof(m_p_prio) );
       m_p_head = NO_TASK;
+      m_p_tail = NO_TASK;
 
       sim_scheduler_event_pending = FALSE;
       sim_scheduler_event_init(&sim_scheduler_event);
@@ -268,12 +257,12 @@ implementation
 	        dbg("Scheduler", "Told to run next task, but no task to run.\n");
           return FALSE;
         }
-        dbg("PriorityRun", "Running Priority task %hhu, priority %hhu.\n", nextTask, m_p_prio[nextTask]);
+        dbg("Priority", "Running Priority task %hhu.\n", nextTask);
         signal TaskPriority.runTask[nextTask]();
         return TRUE;
       }
     }
-    dbg("BasicRun", "Running Basic task %hhu.\n", nextTask);
+    dbg("Scheduler", "Running Basic task %hhu.\n", nextTask);
     signal TaskBasic.runTask[nextTask]();
     return TRUE;
   }
@@ -293,11 +282,11 @@ implementation
       result =  pushTask(id) ? SUCCESS : EBUSY;
     }
     if (result == SUCCESS) {
-      dbg("BasicPost", "Posting Basic task %hhu.\n", id);
+      dbg("Scheduler", "Posting Basic task %hhu.\n", id);
       sim_scheduler_submit_event();
     }
     else {
-      dbg("DeadLine", "Posting Basic task %hhu, but already posted.\n", id);
+      dbg("Scheduler", "Posting Basic task %hhu, but already posted.\n", id);
     }
     return result;
   }
@@ -313,11 +302,11 @@ implementation
       result =  pushPTask(id, prio) ? SUCCESS : EBUSY;
     }
     if (result == SUCCESS) {
-      dbg("PriorityPost", "Posting Priority task %hhu, priority = %hhu\n", id, prio);
+      dbg("Priority", "Posting Priority task %hhu, priority = %hhu\n", id, prio);
       sim_scheduler_submit_event();
     }
     else {
-      dbg("DeadLine", "Posting Priority task %hhu, priority = %hhu. but already posted.\n", id,prio);
+      dbg("Priority", "Posting Priority task %hhu, priority = %hhu. but already posted.\n", id,prio);
     }
     return result;
   }
