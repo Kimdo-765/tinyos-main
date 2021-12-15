@@ -1,6 +1,5 @@
-// $Id: TinySchedulerC.nc,v 1.5 2010-06-29 22:07:56 scipio Exp $
 /*
- * Copyright (c) 2005 The Regents of the University  of California.
+ * Copyright (c) 2004-2005 The Regents of the University  of California.  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,7 +12,7 @@
  *   notice, this list of conditions and the following disclaimer in the
  *   documentation and/or other materials provided with the
  *   distribution.
- * - Neither the name of the copyright holders nor the names of
+ * - Neither the name of the University of California nor the names of
  *   its contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
@@ -29,31 +28,25 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/**
- * The TinyOS scheduler. It provides two interfaces: Scheduler,
- * for TinyOS to initialize and run tasks, and TaskBasic, the simplext
- * class of TinyOS tasks (reserved always at-most-once posting,
- * FIFO, parameter-free). For details and information on how to
- * replace the scheduler, refer to TEP 106.
  *
- * @author  Phil Levis
- * @date    August 7 2005
- * @see     TEP 106: Tasks and Schedulers
+ * Copyright (c) 2002-2003 Intel Corporation
+ * All rights reserved.
+ *
+ * This file is distributed under the terms in the attached INTEL-LICENSE     
+ * file. If you do not find these files, copies can be found by writing to
+ * Intel Research Berkeley, 2150 Shattuck Avenue, Suite 1300, Berkeley, CA, 
+ * 94704.  Attention:  Intel License Inquiry.
  */
 
-configuration TinySchedulerC {
-  provides interface Scheduler;
-  provides interface TaskBasic[uint8_t id];
-  provides interface TaskPriority[uint8_t id];
-}
-implementation {
-  components SchedulerBasicP as Sched;
-  components McuSleepC as Sleep;
-  Scheduler = Sched;
-  TaskBasic = Sched.TaskBasic;
-  TaskPriority = Sched.TaskPriority;
-  Sched.McuSleep -> Sleep;
-}
+#ifndef RADIO_COUNT_TO_LEDS_H
+#define RADIO_COUNT_TO_LEDS_H
 
+typedef nx_struct radio_count_msg {
+  nx_uint16_t counter;
+} radio_count_msg_t;
+
+enum {
+  AM_RADIO_COUNT_MSG = 6,
+};
+
+#endif

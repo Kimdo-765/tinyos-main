@@ -1,8 +1,5 @@
-// $Id: SchedulerBasicP.nc,v 1.11 2010-06-29 22:07:56 scipio Exp $
-
 /*
- * Copyright (c) 2000-2003 The Regents of the University  of California.  
- * All rights reserved.
+ * Copyright (c) 2005 Stanford University. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -14,7 +11,7 @@
  *   notice, this list of conditions and the following disclaimer in the
  *   documentation and/or other materials provided with the
  *   distribution.
- * - Neither the name of the University of California nor the names of
+ * - Neither the name of the copyright holder nor the names of
  *   its contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
@@ -30,32 +27,27 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Copyright (c) 2002-2003 Intel Corporation
- * All rights reserved.
- *
- * This file is distributed under the terms in the attached INTEL-LICENSE     
- * file. If you do not find these files, copies can be found by writing to
- * Intel Research Berkeley, 2150 Shattuck Avenue, Suite 1300, Berkeley, CA, 
- * 94704.  Attention:  Intel License Inquiry.
  */
 
 /**
- * SchedulerBasicP implements the default TinyOS scheduler sequence, as
- * documented in TEP 106.
+ *
+ * SimSchedulerBasic implements the default TinyOS scheduler sequence
+ * (documented in TEP 106) for the TOSSIM platform. Its major departure
+ * from the standard TinyOS scheduler is that tasks are executed
+ * within TOSSIM events. This introduces task latency.
  *
  * @author Philip Levis
  * @author Cory Sharp
- * @date   January 19 2005
+ * @date   August 19 2005
  */
 
-#include <hardware.h>
 
-module SchedulerBasicP @safe() {
+#include <sim_event_queue.h>
+
+module SimSchedulerBasicP {
   provides interface Scheduler;
   provides interface TaskBasic[uint8_t id];
   provides interface TaskPriority[uint8_t id];
-  uses interface McuSleep;
 }
 implementation
 {
@@ -75,6 +67,56 @@ implementation
   uint8_t m_p_next[NUM_TASKS];
   uint8_t m_p_prio[NUM_TASKS];
 
+  /* This simulation state is kept on a per-node basis.
+     Better to take advantage of nesC's automatic state replication
+     than try to do it ourselves. */
+  bool sim_scheduler_event_pending = FALSE;
+  sim_event_t sim_scheduler_event;
+
+  int sim_config_task_latency() {return 100;}
+  
+
+  /* Only enqueue the event for execution if it is
+     not already enqueued. If there are more tasks in the
+     queue, the event will re-enqueue itself (see the handle
+     function). */
+  
+  void sim_scheduler_submit_event() {
+    if (sim_scheduler_event_pending == FALSE) {
+      sim_scheduler_event.time = sim_time() + sim_config_task_latency();
+      sim_queue_insert(&sim_scheduler_event);
+      sim_scheduler_event_pending = TRUE;
+    }
+  }
+
+  void sim_scheduler_event_handle(sim_event_t* e) {
+    sim_scheduler_event_pending = FALSE;
+
+    // If we successfully executed a task, re-enqueue the event. This
+    // will always succeed, as sim_scheduler_event_pending was just
+    // set to be false.  Note that this means there will be an extra
+    // execution (on an empty task queue). We could optimize this
+    // away, but this code is cleaner, and more accurately reflects
+    // the real TinyOS main loop.
+    
+    if (call Scheduler.runNextTask()) {
+      sim_scheduler_submit_event();
+    }
+  }
+
+  
+  /* Initialize a scheduler event. This should only be done
+   * once, when the scheduler is initialized. */
+  void sim_scheduler_event_init(sim_event_t* e) {
+    e->mote = sim_node();
+    e->force = 0;
+    e->data = NULL;
+    e->handle = sim_scheduler_event_handle;
+    e->cleanup = sim_queue_cleanup_none;
+  }
+
+
+
   // Helper functions (internal functions) intentionally do not have atomic
   // sections.  It is left as the duty of the exported interface functions to
   // manage atomicity to minimize chances for binary code bloat.
@@ -82,7 +124,7 @@ implementation
   // move the head forward
   // if the head is at the end, mark the tail at the end, too
   // mark the task as not in the queue
-  inline uint8_t popTask()
+  uint8_t popTask()
   {
     if( m_head != NO_TASK )
     {
@@ -100,8 +142,8 @@ implementation
       return NO_TASK;
     }
   }
-  
-  inline uint8_t popPTask()
+
+  uint8_t popPTask()
   {
     if( m_p_head != NO_TASK )
     {
@@ -121,6 +163,7 @@ implementation
     }
   }
   
+  
   bool isWaiting( uint8_t id )
   {
     return (m_next[id] != NO_TASK) || (m_tail == id);
@@ -137,13 +180,13 @@ implementation
     {
       if( m_head == NO_TASK )
       {
-      	m_head = id;
-	      m_tail = id;
+	m_head = id;
+	m_tail = id;
       }
       else
       {
-	      m_next[m_tail] = id;
-	      m_tail = id;
+	m_next[m_tail] = id;
+	m_tail = id;
       }
       return TRUE;
     }
@@ -159,8 +202,8 @@ implementation
     {
       if( m_p_head == NO_TASK )
       {
-	      m_head = id;
-      	m_tail = id;
+	      m_p_head = id;
+      	m_p_tail = id;
         m_p_prio[id] = prio;
       }
       else
@@ -172,6 +215,7 @@ implementation
           m_tail = id;
         m_p_next[id] = m_p_next[q];
         m_p_next[q] = id;
+        dbg("Priority", "Push behind head\n");
       }
       return TRUE;
     }
@@ -180,12 +224,13 @@ implementation
       return FALSE;
     }
   }
-
+  
   command void Scheduler.init()
   {
+    dbg("Scheduler", "Initializing scheduler.\n");
     atomic
     {
-      memset( (void *)m_next, NO_TASK, sizeof(m_next) );
+      memset( m_next, NO_TASK, sizeof(m_next) );
       m_head = NO_TASK;
       m_tail = NO_TASK;
 
@@ -193,6 +238,9 @@ implementation
       memset( (void *)m_p_prio, NO_TASK, sizeof(m_p_prio) );
       m_p_head = NO_TASK;
       m_p_tail = NO_TASK;
+
+      sim_scheduler_event_pending = FALSE;
+      sim_scheduler_event_init(&sim_scheduler_event);
     }
   }
   
@@ -205,60 +253,68 @@ implementation
       if( nextTask == NO_TASK )
       {
         nextTask = popPTask();
-        if( nextTask == NO_TASK )
-	        return FALSE;
+        if( nextTask == NO_TASK ){
+	        dbg("Scheduler", "Told to run next task, but no task to run.\n");
+          return FALSE;
+        }
+        dbg("Priority", "Running Priority task %hhu.\n", nextTask);
         signal TaskPriority.runTask[nextTask]();
         return TRUE;
       }
     }
+    dbg("Scheduler", "Running Basic task %hhu.\n", nextTask);
     signal TaskBasic.runTask[nextTask]();
     return TRUE;
   }
 
-  command void Scheduler.taskLoop()
-  {
-    for (;;)
-    {
-      uint8_t nextTask;
-      uint8_t nextPTask;
-
-      atomic
-      {
-      	while ((nextTask = popTask()) == NO_TASK &&
-               (nextPTask = popPTask()) == NO_TASK)
-	      {
-	        call McuSleep.sleep();
-	      }
-      }
-      if ( nextTask != NO_TASK){
-        signal TaskBasic.runTask[nextTask]();
-      }
-      else if( nextPTask != NO_TASK){
-        signal TaskPriority.runTask[nextPTask]();
-      }
-    }
+  command void Scheduler.taskLoop() {
+    // This should never run.
   }
-
+  
   /**
    * Return SUCCESS if the post succeeded, EBUSY if it was already posted.
    */
   
   async command error_t TaskBasic.postTask[uint8_t id]()
   {
-    atomic { return pushTask(id) ? SUCCESS : EBUSY; }
-  }
-
-  async command error_t TaskPriority.postTask[uint8_t id](uint8_t prio)
-  {
-    atomic { return pushPTask(id, prio) ? SUCCESS : EBUSY; }
+    error_t result;
+    atomic {
+      result =  pushTask(id) ? SUCCESS : EBUSY;
+    }
+    if (result == SUCCESS) {
+      dbg("Scheduler", "Posting Basic task %hhu.\n", id);
+      sim_scheduler_submit_event();
+    }
+    else {
+      dbg("Scheduler", "Posting Basic task %hhu, but already posted.\n", id);
+    }
+    return result;
   }
 
   default event void TaskBasic.runTask[uint8_t id]()
   {
   }
 
+  async command error_t TaskPriority.postTask[uint8_t id](uint8_t prio)
+  {
+    error_t result;
+    atomic {
+      result =  pushPTask(id, prio) ? SUCCESS : EBUSY;
+    }
+    if (result == SUCCESS) {
+      dbg("Priority", "Posting Priority task %hhu, priority = %hhu\n", id, prio);
+      sim_scheduler_submit_event();
+    }
+    else {
+      dbg("Priority", "Posting Priority task %hhu, priority = %hhu. but already posted.\n", id,prio);
+    }
+    return result;
+  }
+
   default event void TaskPriority.runTask[uint8_t id]()
   {
   }
+
+
 }
 

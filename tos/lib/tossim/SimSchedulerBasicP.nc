@@ -47,18 +47,25 @@
 module SimSchedulerBasicP {
   provides interface Scheduler;
   provides interface TaskBasic[uint8_t id];
+  provides interface TaskPriority[uint8_t id];
 }
 implementation
 {
   enum
   {
     NUM_TASKS = uniqueCount("TinySchedulerC.TaskBasic"),
+    NUM_TASKS_P = uniqueCount("TinySchedulerC.TaskPriority"),
     NO_TASK = 255,
   };
 
   uint8_t m_head;
   uint8_t m_tail;
   uint8_t m_next[NUM_TASKS];
+
+  uint8_t m_p_head;
+  uint8_t m_p_tail;
+  uint8_t m_p_next[NUM_TASKS];
+  uint8_t m_p_prio[NUM_TASKS];
 
   /* This simulation state is kept on a per-node basis.
      Better to take advantage of nesC's automatic state replication
@@ -135,10 +142,36 @@ implementation
       return NO_TASK;
     }
   }
+
+  uint8_t popPTask()
+  {
+    if( m_p_head != NO_TASK )
+    {
+      uint8_t id = m_p_head;
+      m_p_head = m_p_next[m_p_head];
+      if( m_p_head == NO_TASK )
+      {
+        m_p_tail = NO_TASK;
+      }
+      m_p_next[id] = NO_TASK;
+      m_p_prio[id] = NO_TASK;
+      return id;
+    }
+    else
+    {
+      return NO_TASK;
+    }
+  }
+  
   
   bool isWaiting( uint8_t id )
   {
     return (m_next[id] != NO_TASK) || (m_tail == id);
+  }
+
+  bool isPWaiting( uint8_t id )
+  {
+    return (m_p_next[id] != NO_TASK) || (m_p_tail == id);
   }
 
   bool pushTask( uint8_t id )
@@ -163,6 +196,34 @@ implementation
     }
   }
   
+  bool pushPTask( uint8_t id, uint8_t prio)
+  {
+    if( !isPWaiting(id) )
+    {
+      if( m_p_head == NO_TASK )
+      {
+	      m_head = id;
+      	m_tail = id;
+        m_p_prio[id] = prio;
+      }
+      else
+      {
+        uint8_t q = m_p_head;
+        while(m_p_next[q] != NO_TASK && m_p_prio[m_p_next[q]] <= prio)
+          q = m_p_next[q];
+        if(q == m_tail)
+          m_tail = id;
+        m_p_next[id] = m_p_next[q];
+        m_p_next[q] = id;
+      }
+      return TRUE;
+    }
+    else
+    {
+      return FALSE;
+    }
+  }
+  
   command void Scheduler.init()
   {
     dbg("Scheduler", "Initializing scheduler.\n");
@@ -171,6 +232,11 @@ implementation
       memset( m_next, NO_TASK, sizeof(m_next) );
       m_head = NO_TASK;
       m_tail = NO_TASK;
+
+      memset( (void *)m_p_next, NO_TASK, sizeof(m_p_next) );
+      memset( (void *)m_p_prio, NO_TASK, sizeof(m_p_prio) );
+      m_p_head = NO_TASK;
+      m_p_tail = NO_TASK;
 
       sim_scheduler_event_pending = FALSE;
       sim_scheduler_event_init(&sim_scheduler_event);
@@ -185,11 +251,17 @@ implementation
       nextTask = popTask();
       if( nextTask == NO_TASK )
       {
-	dbg("Scheduler", "Told to run next task, but no task to run.\n");
-	return FALSE;
+        nextTask = popPTask();
+        if( nextTask == NO_TASK ){
+	        dbg("Scheduler", "Told to run next task, but no task to run.\n");
+          return FALSE;
+        }
+        dbg("Priority", "Running Priority task %hhu.\n", nextTask);
+        signal TaskPriority.runTask[nextTask]();
+        return TRUE;
       }
     }
-    dbg("Scheduler", "Running task %hhu.\n", nextTask);
+    dbg("Scheduler", "Running Basic task %hhu.\n", nextTask);
     signal TaskBasic.runTask[nextTask]();
     return TRUE;
   }
@@ -209,11 +281,11 @@ implementation
       result =  pushTask(id) ? SUCCESS : EBUSY;
     }
     if (result == SUCCESS) {
-      dbg("Scheduler", "Posting task %hhu.\n", id);
+      dbg("Scheduler", "Posting Basic task %hhu.\n", id);
       sim_scheduler_submit_event();
     }
     else {
-      dbg("Scheduler", "Posting task %hhu, but already posted.\n", id);
+      dbg("Scheduler", "Posting Basic task %hhu, but already posted.\n", id);
     }
     return result;
   }
@@ -222,6 +294,25 @@ implementation
   {
   }
 
+  async command error_t TaskPriority.postTask[uint8_t id](uint8_t prio)
+  {
+    error_t result;
+    atomic {
+      result =  pushPTask(id, prio) ? SUCCESS : EBUSY;
+    }
+    if (result == SUCCESS) {
+      dbg("Priority", "Posting Priority task %hhu.\n", id);
+      sim_scheduler_submit_event();
+    }
+    else {
+      dbg("Priority", "Posting Priority task %hhu, but already posted.\n", id);
+    }
+    return result;
+  }
+
+  default event void TaskPriority.runTask[uint8_t id]()
+  {
+  }
 
 
 }
